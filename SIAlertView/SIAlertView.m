@@ -26,6 +26,7 @@ NSString *const SIAlertViewDidDismissNotification = @"SIAlertViewDidDismissNotif
 #define CONTENT_PADDING_BOTTOM 10
 #define BUTTON_HEIGHT 44
 #define CONTAINER_WIDTH 300
+#define ACCESSORY_MAX_HEIGHT 400
 
 const UIWindowLevel UIWindowLevelSIAlert = 1996.0;  // don't overlap system's alert
 const UIWindowLevel UIWindowLevelSIAlertBackground = 1985.0; // below the alert window
@@ -49,6 +50,8 @@ static SIAlertView *__si_alert_current_view;
 
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *messageLabel;
+@property (nonatomic, strong) UIView* accessoryPlaceholderView; // contains accessoryView, if any
+
 @property (nonatomic, strong) UIView *containerView;
 @property (nonatomic, strong) NSMutableArray *buttons;
 
@@ -301,10 +304,10 @@ static SIAlertView *__si_alert_current_view;
     if (!__si_alert_background_window) {
         
         CGRect frame = [[UIScreen mainScreen] bounds];
-        if([[UIScreen mainScreen] respondsToSelector:@selector(fixedCoordinateSpace)])
-        {
-            frame = [[[UIScreen mainScreen] fixedCoordinateSpace] convertRect:frame fromCoordinateSpace:[[UIScreen mainScreen] coordinateSpace]];
-        }
+//        if([[UIScreen mainScreen] respondsToSelector:@selector(fixedCoordinateSpace)])
+//        {
+//            frame = [[[UIScreen mainScreen] fixedCoordinateSpace] convertRect:frame fromCoordinateSpace:[[UIScreen mainScreen] coordinateSpace]];
+//        }
         
         __si_alert_background_window = [[SIAlertBackgroundWindow alloc] initWithFrame:frame
                                                                              andStyle:[SIAlertView currentAlertView].backgroundStyle];
@@ -346,6 +349,11 @@ static SIAlertView *__si_alert_current_view;
 {
 	_message = message;
     [self invalidateLayout];
+}
+
+-(void)setAccessoryView:(UIView *)newAccessoryView{
+  _accessoryView = newAccessoryView;
+  [self invalidateLayout];
 }
 
 #pragma mark - Public
@@ -423,6 +431,10 @@ static SIAlertView *__si_alert_current_view;
         #ifdef __IPHONE_7_0
         [self addParallaxEffect];
         #endif
+        // start animation in accessoryView, if any, usually an UIImageView
+        if ([self.accessoryView respondsToSelector:@selector(startAnimating)]){
+          [self.accessoryView performSelector:@selector(startAnimating)];
+        }
         
         [SIAlertView setAnimating:NO];
         
@@ -724,19 +736,49 @@ static SIAlertView *__si_alert_current_view;
 #endif
     
     CGFloat height = [self preferredHeight];
-    CGFloat left = (self.bounds.size.width - CONTAINER_WIDTH) * 0.5;
-    CGFloat top = (self.bounds.size.height - height) * 0.5;
+    CGFloat left = roundf((self.bounds.size.width - CONTAINER_WIDTH) * 0.5);
+    CGFloat top = roundf((self.bounds.size.height - height) * 0.5);
     self.containerView.transform = CGAffineTransformIdentity;
     self.containerView.frame = CGRectMake(left, top, CONTAINER_WIDTH, height);
     self.containerView.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.containerView.bounds cornerRadius:self.containerView.layer.cornerRadius].CGPath;
     
     CGFloat y = CONTENT_PADDING_TOP;
-	if (self.titleLabel) {
-        self.titleLabel.text = self.title;
-        CGFloat height = [self heightForTitleLabel];
-        self.titleLabel.frame = CGRectMake(CONTENT_PADDING_LEFT, y, self.containerView.bounds.size.width - CONTENT_PADDING_LEFT * 2, height);
-        y += height;
-	}
+  
+    
+  
+    if (self.titleLabel) {
+      if (y > CONTENT_PADDING_TOP) {
+        y += GAP;
+      }
+
+      self.titleLabel.text = self.title;
+      CGFloat height = [self heightForTitleLabel];
+      self.titleLabel.frame = CGRectMake(CONTENT_PADDING_LEFT, y, self.containerView.bounds.size.width - CONTENT_PADDING_LEFT * 2, height);
+      y += height;
+    }
+  
+    if (self.accessoryPlaceholderView){
+        [[self.accessoryPlaceholderView subviews] makeObjectsPerformSelector:@selector(removeFromSuperview)];
+        if (self.accessoryView){
+            if (y > CONTENT_PADDING_TOP) {
+                y += GAP;
+            }
+            CGSize size = self.accessoryView.frame.size;
+            self.accessoryView.frame = CGRectMake(0, 0, size.width, size.height);
+            [self.accessoryPlaceholderView addSubview:self.accessoryView];
+            
+            // accessory placeholder view clips the contained view
+            if (size.width > self.containerView.bounds.size.width - CONTENT_PADDING_LEFT * 2)
+                size.width = self.containerView.bounds.size.width - CONTENT_PADDING_LEFT * 2;
+            
+            if (size.height >  ACCESSORY_MAX_HEIGHT) // TODO: clip the height smarter
+                size.height = ACCESSORY_MAX_HEIGHT;
+            
+            self.accessoryPlaceholderView.frame = CGRectMake(self.containerView.bounds.size.width / 2 - size.width / 2, y, size.width, size.height);
+            y += size.height;
+        }
+    }
+    
     if (self.messageLabel) {
         if (y > CONTENT_PADDING_TOP) {
             y += GAP;
@@ -779,27 +821,33 @@ static SIAlertView *__si_alert_current_view;
 	if (self.title) {
 		height += [self heightForTitleLabel];
 	}
-    if (self.message) {
-        if (height > CONTENT_PADDING_TOP) {
-            height += GAP;
-        }
-        height += [self heightForMessageLabel];
+  if (self.accessoryView){
+    if (height > CONTENT_PADDING_TOP) {
+      height += GAP;
     }
-    if (self.items.count > 0) {
-        if (height > CONTENT_PADDING_TOP) {
-            height += GAP;
-        }
-        if (self.items.count <= 2 && self.buttonsListStyle == SIAlertViewButtonsListStyleNormal) {
-            height += BUTTON_HEIGHT;
-        } else {
-            height += (BUTTON_HEIGHT + GAP) * self.items.count - GAP;
-            if (self.buttons.count > 2 && ((SIAlertItem *)[self.items lastObject]).type == SIAlertViewButtonTypeCancel) {
-                height += CANCEL_BUTTON_PADDING_TOP;
-            }
-        }
-    }
-    height += CONTENT_PADDING_BOTTOM;
-	return height;
+    height += MIN(self.accessoryView.frame.size.height, ACCESSORY_MAX_HEIGHT);
+  }
+  if (self.message) {
+      if (height > CONTENT_PADDING_TOP) {
+          height += GAP;
+      }
+      height += [self heightForMessageLabel];
+  }
+  if (self.items.count > 0) {
+      if (height > CONTENT_PADDING_TOP) {
+          height += GAP;
+      }
+      if (self.items.count <= 2 && self.buttonsListStyle == SIAlertViewButtonsListStyleNormal) {
+          height += BUTTON_HEIGHT;
+      } else {
+          height += (BUTTON_HEIGHT + GAP) * self.items.count - GAP;
+          if (self.buttons.count > 2 && ((SIAlertItem *)[self.items lastObject]).type == SIAlertViewButtonTypeCancel) {
+              height += CANCEL_BUTTON_PADDING_TOP;
+          }
+      }
+  }
+  height += CONTENT_PADDING_BOTTOM;
+	return roundf(height);
 }
 
 - (CGFloat)heightForTitleLabel
@@ -877,6 +925,7 @@ static SIAlertView *__si_alert_current_view;
     [self setupContainerView];
     [self updateTitleLabel];
     [self updateMessageLabel];
+    [self updateAccessoryView];
     [self setupButtons];
     [self invalidateLayout];
 }
@@ -947,12 +996,48 @@ static SIAlertView *__si_alert_current_view;
             self.messageLabel.backgroundColor = [UIColor redColor];
 #endif
         }
-        self.messageLabel.text = self.message;
+
+      // automatically switch between centering message text if one line
+      // or left-justifying text for a multiple-line message
+      CGFloat maxHeight = MESSAGE_MAX_LINE_COUNT * self.messageLabel.font.lineHeight;
+      CGSize size = [self.message sizeWithFont:self.messageLabel.font
+                             constrainedToSize:CGSizeMake(CONTAINER_WIDTH - CONTENT_PADDING_LEFT * 2, maxHeight)
+                                 lineBreakMode:self.messageLabel.lineBreakMode];
+      
+      if (size.height > self.messageLabel.font.lineHeight * 1.5){
+        self.messageLabel.textAlignment = NSTextAlignmentLeft;
+      }else{
+        self.messageLabel.textAlignment = NSTextAlignmentCenter;
+      }
+      
+      self.messageLabel.text = self.message;
     } else {
         [self.messageLabel removeFromSuperview];
         self.messageLabel = nil;
     }
     [self invalidateLayout];
+}
+
+-(void)updateAccessoryView
+{
+  if (self.accessoryView) {
+    if (!self.accessoryPlaceholderView) {
+      CGSize size = self.accessoryView.frame.size;
+      self.accessoryPlaceholderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, size.width, size.height)];
+      self.accessoryPlaceholderView.backgroundColor = [UIColor clearColor];
+      self.accessoryPlaceholderView.clipsToBounds = YES;
+      [self.containerView addSubview:self.accessoryPlaceholderView];
+    }
+    
+    // remove all old views
+    [[self.accessoryPlaceholderView subviews] makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    
+    // add in the new view
+    [self.accessoryPlaceholderView addSubview:self.accessoryView];
+  }else{
+    [self.accessoryPlaceholderView removeFromSuperview];
+    self.accessoryPlaceholderView = nil;
+  }
 }
 
 - (void)setupButtons
