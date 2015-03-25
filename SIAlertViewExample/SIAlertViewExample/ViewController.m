@@ -25,8 +25,8 @@
     [[SIAlertView appearance] setMessageFont:[UIFont systemFontOfSize:13]];
     [[SIAlertView appearance] setTitleColor:[UIColor greenColor]];
     [[SIAlertView appearance] setMessageColor:[UIColor purpleColor]];
-    [[SIAlertView appearance] setCornerRadius:12];
-    [[SIAlertView appearance] setShadowRadius:20];
+    [[SIAlertView appearance] setCornerRadius:4];
+    [[SIAlertView appearance] setShadowRadius:4];
     [[SIAlertView appearance] setViewBackgroundColor:[UIColor colorWithRed:0.891 green:0.936 blue:0.978 alpha:1.000]];
     [[SIAlertView appearance] setButtonColor:[UIColor greenColor]];
     [[SIAlertView appearance] setCancelButtonColor:[UIColor redColor]];
@@ -145,7 +145,7 @@ id observer1,observer2,observer3,observer4;
 
 - (IBAction)alert3:(id)sender
 {
-    SIAlertView *alertView = [[SIAlertView alloc] initWithTitle:nil andMessage:@"Message3"];
+    SIAlertView *alertView = [[SIAlertView alloc] initWithTitle:nil andMessage:nil];
     [alertView addButtonWithTitle:@"Cancel"
                              type:SIAlertViewButtonTypeCancel
                           handler:^(SIAlertView *alertView) {
@@ -156,8 +156,13 @@ id observer1,observer2,observer3,observer4;
                           handler:^(SIAlertView *alertView) {
                               NSLog(@"OK Clicked");
                           }];
-    alertView.transitionStyle = SIAlertViewTransitionStyleDropDown;
+    alertView.transitionStyle = SIAlertViewTransitionStyleSlideFromTop;
     alertView.backgroundStyle = SIAlertViewBackgroundStyleSolid;
+    
+    UIView *accessoryV = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 200, 100)];
+    accessoryV.backgroundColor = [UIColor redColor];
+    
+    alertView.accessoryView = accessoryV;
     
     alertView.willShowHandler = ^(SIAlertView *alertView) {
         NSLog(@"%@, willShowHandler3", alertView);
